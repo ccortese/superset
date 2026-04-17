@@ -22,7 +22,7 @@ import { connect } from 'react-redux';
 import type { QueryEditor, SqlLabRootState } from 'src/SqlLab/types';
 import { t } from '@apache-superset/core';
 import { FeatureFlag, isFeatureEnabled } from '@superset-ui/core';
-import { styled, css } from '@apache-superset/core/ui';
+import { styled, css } from '@apache-superset/core/theme';
 import { Logger } from 'src/logger/LogUtils';
 import { EmptyState, Tooltip } from '@superset-ui/core/components';
 import { detectOS } from 'src/utils/common';
