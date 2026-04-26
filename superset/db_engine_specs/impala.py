@@ -208,6 +208,8 @@ class ImpalaEngineSpec(BaseEngineSpec):
         :return: True if query cancelled successfully, False otherwise
         """
         try:
+            if not re.match(r"^[0-9a-f]+:[0-9a-f]+$", cancel_query_id):
+                return False
             impala_host = query.database.url_object.host
             url = f"http://{impala_host}:25000/cancel_query?query_id={cancel_query_id}"
             response = requests.post(url, timeout=3)

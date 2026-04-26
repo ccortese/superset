@@ -431,8 +431,9 @@ class TrinoEngineSpec(PrestoBaseEngineSpec):
         """
         try:
             cursor.execute(
-                f"CALL system.runtime.kill_query(query_id => '{cancel_query_id}',"
-                "message => 'Query cancelled by Superset')"
+                "CALL system.runtime.kill_query(query_id => ?,"
+                "message => 'Query cancelled by Superset')",
+                (str(cancel_query_id),),
             )
             cursor.fetchall()  # needed to trigger the call
         except Exception:  # pylint: disable=broad-except
