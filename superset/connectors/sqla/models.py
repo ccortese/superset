@@ -62,7 +62,7 @@ from sqlalchemy.orm import (
 from sqlalchemy.orm.mapper import Mapper
 from sqlalchemy.schema import UniqueConstraint
 from sqlalchemy.sql import column, ColumnElement, literal_column, quoted_name, table
-from sqlalchemy.sql.elements import ColumnClause, TextClause
+from sqlalchemy.sql.elements import ColumnClause, Grouping, TextClause
 from sqlalchemy.sql.expression import Label
 from sqlalchemy.sql.selectable import Alias, TableClause
 from sqlalchemy.types import JSON
@@ -743,7 +743,7 @@ class BaseDatasource(
         self,
         template_processor: Optional[BaseTemplateProcessor] = None,
         include_global_guest_rls: bool = True,
-    ) -> list[TextClause]:
+    ) -> list[ColumnElement]:
         """
         Return the appropriate row level security filters for this table and the
         current user.
@@ -757,13 +757,13 @@ class BaseDatasource(
         """
         template_processor = template_processor or self.get_template_processor()
 
-        all_filters: list[TextClause] = []
-        filter_groups: dict[Union[int, str], list[TextClause]] = defaultdict(list)
+        all_filters: list[ColumnElement] = []
+        filter_groups: dict[Union[int, str], list[ColumnElement]] = defaultdict(list)
         try:
             for filter_ in security_manager.get_rls_filters(self):
-                rendered = template_processor.process_template(filter_.clause)
-                validate_rls_clause(rendered)
-                clause = self.text(f"({rendered})")
+                processed_clause = template_processor.process_template(filter_.clause)
+                validate_rls_clause(processed_clause)
+                clause = Grouping(self.text(processed_clause))
                 if filter_.group_key:
                     filter_groups[filter_.group_key].append(clause)
                 else:
@@ -773,9 +773,9 @@ class BaseDatasource(
                 for rule in security_manager.get_guest_rls_filters(self):
                     if not include_global_guest_rls and not rule.get("dataset"):
                         continue
-                    rendered = template_processor.process_template(rule["clause"])
-                    validate_rls_clause(rendered)
-                    clause = self.text(f"({rendered})")
+                    processed_clause = template_processor.process_template(rule["clause"])
+                    validate_rls_clause(processed_clause)
+                    clause = Grouping(self.text(processed_clause))
                     all_filters.append(clause)
 
             grouped_filters = [or_(*clauses) for clauses in filter_groups.values()]
