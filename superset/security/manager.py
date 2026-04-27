@@ -3293,6 +3293,32 @@ class SupersetSecurityManager(  # pylint: disable=too-many-public-methods
             role.name for role in self.get_user_roles()
         ]
 
+    def _apply_login_api_rate_limit(self) -> None:
+        """Apply rate limiting to the /api/v1/security/login endpoint.
+
+        Uses AUTH_RATE_LIMIT_LOGIN_ENABLED, AUTH_RATE_LIMIT_LOGIN_ATTEMPTS,
+        and AUTH_RATE_LIMIT_LOGIN_WINDOW from the app config. The rate limit
+        string is constructed as "{attempts} per {window} second".
+        """
+        if not current_app.config.get("AUTH_RATE_LIMIT_LOGIN_ENABLED", True):
+            return
+
+        attempts: int = current_app.config.get("AUTH_RATE_LIMIT_LOGIN_ATTEMPTS", 10)
+        window: int = current_app.config.get("AUTH_RATE_LIMIT_LOGIN_WINDOW", 60)
+        rate_limit_string = f"{attempts} per {window} second"
+
+        from flask_appbuilder.security.api import SecurityApi
+
+        for view in self.appbuilder.baseviews:
+            if isinstance(view, SecurityApi):
+                blueprint = getattr(view, "blueprint", None)
+                if blueprint is not None:
+                    self.limiter.limit(rate_limit_string, methods=["POST"])(blueprint)
+                    logger.info(
+                        "Rate limiting applied to login API: %s", rate_limit_string
+                    )
+                break
+
     # temporal change to remove the roles view from the security menu,
     # after migrating all views to frontend, we will set FAB_ADD_SECURITY_VIEWS = False
     def register_views(self) -> None:
@@ -3329,6 +3355,8 @@ class SupersetSecurityManager(  # pylint: disable=too-many-public-methods
         finally:
             # Restore original value even if an exception occurs
             current_app.config["AUTH_RATE_LIMITED"] = original_auth_rate_limited
+
+        self._apply_login_api_rate_limit()
 
         for view in list(self.appbuilder.baseviews):
             if isinstance(view, self.rolemodelview.__class__) and getattr(

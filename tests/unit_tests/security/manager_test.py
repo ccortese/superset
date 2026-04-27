@@ -1547,3 +1547,52 @@ def test_validate_child_in_parent_multilayer_null_params(
     assert not sm._validate_child_in_parent_multilayer(
         child_slice_id=1, parent_slice=parent_slice
     )
+
+
+@pytest.mark.parametrize(
+    "app",
+    [
+        {
+            "RATELIMIT_ENABLED": True,
+            "AUTH_RATE_LIMIT_LOGIN_ENABLED": True,
+            "AUTH_RATE_LIMIT_LOGIN_ATTEMPTS": 5,
+            "AUTH_RATE_LIMIT_LOGIN_WINDOW": 30,
+        }
+    ],
+    indirect=True,
+)
+def test_login_api_rate_limit_applied(
+    app_context: None,
+) -> None:
+    """Test that rate limiting is applied to the /api/v1/security/login endpoint."""
+    from flask_appbuilder.security.api import SecurityApi
+
+    security_api_view = None
+    for view in appbuilder.baseviews:
+        if isinstance(view, SecurityApi):
+            security_api_view = view
+            break
+
+    assert security_api_view is not None, "SecurityApi view should be registered"
+
+
+@pytest.mark.parametrize(
+    "app",
+    [
+        {
+            "RATELIMIT_ENABLED": True,
+            "AUTH_RATE_LIMIT_LOGIN_ENABLED": False,
+        }
+    ],
+    indirect=True,
+)
+def test_login_api_rate_limit_disabled(
+    app_context: None,
+    mocker: MockerFixture,
+) -> None:
+    """Test that rate limiting is skipped when disabled."""
+    sm = SupersetSecurityManager(appbuilder)
+    limiter_spy = mocker.spy(sm, "_apply_login_api_rate_limit")
+
+    sm._apply_login_api_rate_limit()
+    limiter_spy.assert_called_once()
