@@ -35,7 +35,13 @@ from superset.commands.dashboard.exceptions import (
     DashboardSlugExistsValidationError,
     DashboardUpdateFailedError,
 )
-from superset.commands.utils import populate_roles, update_tags, validate_tags
+from superset.commands.exceptions import ForbiddenError
+from superset.commands.utils import (
+    populate_roles,
+    update_tags,
+    validate_owners_update,
+    validate_tags,
+)
 from superset.daos.dashboard import DashboardDAO
 from superset.daos.report import ReportScheduleDAO
 from superset.exceptions import SupersetSecurityException
@@ -85,6 +91,12 @@ class UpdateDashboardCommand(UpdateMixin, BaseCommand):
         self._model = DashboardDAO.find_by_id(self._model_id)
         if not self._model:
             raise DashboardNotFoundError()
+        # Explicit ownership modification authorization check
+        try:
+            validate_owners_update(self._model.owners, owner_ids)
+        except ForbiddenError as ex:
+            raise DashboardForbiddenError() from ex
+
         # Check ownership
         try:
             security_manager.raise_for_ownership(self._model)

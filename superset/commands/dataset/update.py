@@ -44,6 +44,8 @@ from superset.commands.dataset.exceptions import (
     DatasetUpdateFailedError,
     MultiCatalogDisabledValidationError,
 )
+from superset.commands.exceptions import ForbiddenError
+from superset.commands.utils import validate_owners_update
 from superset.connectors.sqla.models import SqlaTable
 from superset.daos.dataset import DatasetDAO
 from superset.datasets.schemas import FolderSchema
@@ -99,6 +101,12 @@ class UpdateDatasetCommand(UpdateMixin, BaseCommand):
         self._model = DatasetDAO.find_by_id(self._model_id)
         if not self._model:
             raise DatasetNotFoundError()
+
+        # Explicit ownership modification authorization check
+        try:
+            validate_owners_update(self._model.owners, owner_ids)
+        except ForbiddenError as ex:
+            raise DatasetForbiddenError() from ex
 
         # Check permission to update the dataset
         try:
