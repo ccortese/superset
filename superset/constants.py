@@ -29,6 +29,18 @@ EMPTY_STRING = "<empty string>"
 
 CHANGE_ME_SECRET_KEY = "CHANGE_ME_TO_A_COMPLEX_RANDOM_SECRET"  # noqa: S105
 
+# Known weak/default SECRET_KEY values that must never be used in production.
+# Includes the original placeholder plus keys leaked via tutorials,
+# documentation, and Docker images prior to the CVE-2023-27524 fix.
+KNOWN_WEAK_SECRET_KEYS: set[str] = {  # noqa: S105
+    CHANGE_ME_SECRET_KEY,
+    "thisISaSECRET_1234",
+    "YOUR_OWN_RANDOM_GENERATED_SECRET_KEY",
+    "TEST_NON_DEV_SECRET",
+    "REPLACE_WITH_RANDOM_COMPLEX_STRING",
+    "\x02\x01thisismyscretkey\x01\x02\\e\\y\\y\\h",
+}
+
 # UUID for the examples database
 EXAMPLES_DB_UUID = "a2dc77af-e654-49bb-b321-40f6b559a1ee"
 

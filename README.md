@@ -61,6 +61,23 @@ A modern, enterprise-ready business intelligence web application.
 [**Resources**](#resources) |
 [**Organizations Using Superset**](https://superset.apache.org/inTheWild)
 
+## Security Notice — `SECRET_KEY` Configuration
+
+> **Warning** — Superset ships with a placeholder `SECRET_KEY` that **must** be
+> replaced before running in production. Leaving the default value enables
+> session-cookie forgery and full authentication bypass
+> ([CVE-2023-27524](https://nvd.nist.gov/vuln/detail/CVE-2023-27524), CVSS 9.8).
+>
+> Generate a strong key and set it in `superset_config.py` or via the
+> `SUPERSET_SECRET_KEY` environment variable:
+>
+> ```bash
+> openssl rand -base64 42
+> ```
+>
+> Superset will **refuse to start** in non-debug mode if the key matches any
+> known weak default.
+
 ## Why Superset?
 
 Superset is a modern data exploration and data visualization platform. Superset can replace or augment proprietary business intelligence tools for many teams. Superset integrates well with a variety of data sources.
