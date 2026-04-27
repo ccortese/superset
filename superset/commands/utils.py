@@ -25,6 +25,7 @@ from flask_appbuilder.security.sqla.models import Role, User
 from superset import security_manager
 from superset.commands.exceptions import (
     DatasourceNotFoundValidationError,
+    ForbiddenError,
     OwnersNotFoundValidationError,
     RolesNotFoundValidationError,
     TagForbiddenError,
@@ -39,6 +40,35 @@ from superset.utils.core import DatasourceType, get_user_id
 
 if TYPE_CHECKING:
     from superset.connectors.sqla.models import BaseDatasource
+
+
+def validate_owners_update(
+    current_owners: list[User] | None,
+    new_owner_ids: list[int] | None,
+) -> None:
+    """
+    Verify the current user is authorized to modify the owners list.
+    Only admins and existing owners can add or remove owners from a resource.
+
+    :param current_owners: list of current owners on the resource
+    :param new_owner_ids: list of new owner IDs from the request payload, or None
+    :raises ForbiddenError: if the user is not authorized to modify owners
+    """
+    if new_owner_ids is None:
+        return
+
+    current_owners = current_owners or []
+    current_owner_ids = {owner.id for owner in current_owners}
+
+    if set(new_owner_ids) == current_owner_ids:
+        return
+
+    if security_manager.is_admin():
+        return
+
+    user_id = get_user_id()
+    if not user_id or user_id not in current_owner_ids:
+        raise ForbiddenError("Only owners or admins can modify ownership")
 
 
 def populate_owner_list(

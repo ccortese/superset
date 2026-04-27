@@ -33,7 +33,13 @@ from superset.commands.chart.exceptions import (
     DashboardsNotFoundValidationError,
     DatasourceTypeUpdateRequiredValidationError,
 )
-from superset.commands.utils import get_datasource_by_id, update_tags, validate_tags
+from superset.commands.exceptions import ForbiddenError
+from superset.commands.utils import (
+    get_datasource_by_id,
+    update_tags,
+    validate_owners_update,
+    validate_tags,
+)
 from superset.daos.chart import ChartDAO
 from superset.daos.dashboard import DashboardDAO
 from superset.exceptions import SupersetSecurityException
@@ -111,6 +117,12 @@ class UpdateChartCommand(UpdateMixin, BaseCommand):
         self._model = ChartDAO.find_by_id(self._model_id)
         if not self._model:
             raise ChartNotFoundError()
+
+        # Explicit ownership modification authorization check
+        try:
+            validate_owners_update(self._model.owners, owner_ids)
+        except ForbiddenError as ex:
+            raise ChartForbiddenError() from ex
 
         # Check and update ownership; when only updating query context we ignore
         # ownership so the update can be performed by report workers
