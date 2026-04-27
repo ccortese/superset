@@ -343,6 +343,12 @@ RATELIMIT_ENABLED = os.environ.get("SUPERSET_ENV") == "production"
 RATELIMIT_APPLICATION = "50 per second"
 AUTH_RATE_LIMITED = True
 AUTH_RATE_LIMIT = "5 per second"
+# Rate limiting for the /api/v1/security/login endpoint to prevent brute force
+# attacks. When enabled, returns HTTP 429 after exceeding the attempt limit within
+# the configured window.
+AUTH_RATE_LIMIT_LOGIN_ENABLED = True
+AUTH_RATE_LIMIT_LOGIN_ATTEMPTS = 10
+AUTH_RATE_LIMIT_LOGIN_WINDOW = 60  # seconds
 # A storage location conforming to the scheme in storage-scheme. See the limits
 # library for allowed values: https://limits.readthedocs.io/en/stable/storage.html
 # RATELIMIT_STORAGE_URI = "redis://host:port"
