@@ -75,7 +75,7 @@ from superset.exceptions import (
     SupersetTimeoutException,
 )
 from superset.extensions import cache_manager
-from superset.sql.parse import SQLScript
+from superset.sql.parse import SQLScript, strip_sql_block_comments
 from superset.utils import core as utils
 
 if TYPE_CHECKING:
@@ -428,6 +428,10 @@ class SQLExecutor:
         # 1. Render Jinja2 templates
         rendered_sql = self._render_sql_template(sql, opts.template_params)
 
+        # 1b. Strip inline block comments so obfuscated identifiers like
+        # VER/**/SION are normalised before parsing (CVE-2024-53949).
+        rendered_sql = strip_sql_block_comments(rendered_sql)
+
         # 2. Parse SQL with SQLScript - this is the ORIGINAL script
         original_script = SQLScript(rendered_sql, self.database.db_engine_spec.engine)
 
@@ -680,6 +684,10 @@ class SQLExecutor:
         """
         Check for disallowed SQL functions.
 
+        Block comments are stripped from each statement before the denylist
+        check so that bypass patterns like ``VER/**/SION()`` are correctly
+        detected (CVE-2024-53949).
+
         :param script: Parsed SQL script
         :returns: Set of disallowed functions found, or None if none found
         """
@@ -694,8 +702,9 @@ class SQLExecutor:
         # Check each statement for disallowed functions
         found = set()
         for statement in script.statements:
-            # Use the statement's AST to check for function calls
-            statement_str = str(statement).upper()
+            # Strip block comments so that obfuscated names like
+            # VER/**/SION are normalised to VERSION before matching.
+            statement_str = strip_sql_block_comments(str(statement)).upper()
             for func in engine_disallowed:
                 if func.upper() in statement_str:
                     found.add(func)

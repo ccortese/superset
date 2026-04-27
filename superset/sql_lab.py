@@ -56,7 +56,13 @@ from superset.exceptions import (
 from superset.extensions import celery_app, event_logger
 from superset.models.sql_lab import Query
 from superset.result_set import SupersetResultSet
-from superset.sql.parse import BaseSQLStatement, CTASMethod, SQLScript, Table
+from superset.sql.parse import (
+    BaseSQLStatement,
+    CTASMethod,
+    SQLScript,
+    strip_sql_block_comments,
+    Table,
+)
 from superset.sqllab.limiting_factor import LimitingFactor
 from superset.sqllab.utils import write_ipc_buffer
 from superset.utils import json
@@ -400,6 +406,10 @@ def execute_sql_statements(  # noqa: C901
     query.status = QueryStatus.RUNNING
     query.start_running_time = now_as_float()
     db.session.commit()
+
+    # Strip inline block comments so obfuscated identifiers like
+    # VER/**/SION are normalised before parsing (CVE-2024-53949).
+    rendered_query = strip_sql_block_comments(rendered_query)
 
     parsed_script = SQLScript(rendered_query, engine=db_engine_spec.engine)
 
