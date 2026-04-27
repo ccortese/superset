@@ -35,7 +35,7 @@ from superset.common.chart_data import ChartDataResultFormat, ChartDataResultTyp
 from superset.connectors.sqla.models import SqlaTable, TableColumn
 from superset.constants import CACHE_DISABLED_TIMEOUT
 from superset.errors import SupersetErrorType
-from superset.extensions import async_query_manager_factory, db
+from superset.extensions import async_query_manager_factory, db, security_manager
 from superset.models.annotations import AnnotationLayer
 from superset.models.slice import Slice
 from superset.models.sql_lab import Query
@@ -1535,14 +1535,24 @@ class TestGetChartDataApi(BaseTestChartDataApi):
     @pytest.mark.usefixtures("load_birth_names_dashboard_with_slices")
     def test_chart_data_as_guest_user(self, is_guest_user, has_guest_access):
         """
-        Chart data API: Test response does not inlcude the SQL query for embedded
-        users.
+        Chart data API: Test response does not include the SQL query for embedded
+        users who lack SQL Lab read access.
         """
         g.user.rls = []
         is_guest_user.return_value = True
         has_guest_access.return_value = True
 
-        rv = self.client.post(CHART_DATA_URI, json=self.query_context_payload)
+        original_can_access = security_manager.can_access
+
+        def _restricted_can_access(perm: str, view: str) -> bool:
+            if perm == "can_read" and view == "SQLLab":
+                return False
+            return original_can_access(perm, view)
+
+        with mock.patch.object(
+            security_manager, "can_access", side_effect=_restricted_can_access
+        ):
+            rv = self.client.post(CHART_DATA_URI, json=self.query_context_payload)
         data = json.loads(rv.data.decode("utf-8"))
         result = data["result"]
         excluded_key = "query"

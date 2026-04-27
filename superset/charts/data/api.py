@@ -540,7 +540,7 @@ class ChartDataRestApi(ChartRestApi):
 
         if result_format == ChartDataResultFormat.JSON:
             queries = result["queries"]
-            if security_manager.is_guest_user():
+            if not security_manager.can_access("can_read", "SQLLab"):
                 for query in queries:
                     query.pop("query", None)
 
