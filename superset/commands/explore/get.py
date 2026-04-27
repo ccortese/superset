@@ -33,8 +33,8 @@ from superset.commands.explore.permalink.get import GetExplorePermalinkCommand
 from superset.connectors.sqla.models import BaseDatasource, SqlaTable
 from superset.daos.datasource import DatasourceDAO
 from superset.daos.exceptions import DatasourceNotFound
-from superset.exceptions import SupersetException
-from superset.explore.exceptions import WrongEndpointError
+from superset.exceptions import SupersetException, SupersetSecurityException
+from superset.explore.exceptions import DatasetAccessDeniedError, WrongEndpointError
 from superset.explore.permalink.exceptions import ExplorePermalinkGetFailedError
 from superset.extensions import security_manager
 from superset.superset_typing import ExplorableData
@@ -119,11 +119,27 @@ class GetExploreCommand(BaseCommand, ABC):
                     cast(str, self._datasource_type), self._datasource_id
                 )
 
-        datasource_name = _("[Missing Dataset]")
+            # Verify datasource access before exposing any metadata.
+            # Return 403 uniformly for both missing and unauthorized
+            # datasources to prevent ID enumeration.
+            if datasource is None:
+                raise DatasetAccessDeniedError(
+                    "You don't have access to this dataset",
+                    datasource_id=self._datasource_id,
+                    datasource_type=self._datasource_type,
+                )
+            try:
+                security_manager.raise_for_access(datasource=datasource)
+            except SupersetSecurityException:
+                raise DatasetAccessDeniedError(
+                    "You don't have access to this dataset",
+                    datasource_id=self._datasource_id,
+                    datasource_type=self._datasource_type,
+                ) from None
 
-        if datasource:
-            datasource_name = datasource.name
-            security_manager.raise_for_access(datasource=datasource)
+        datasource_name = (
+            _("[Missing Dataset]") if datasource is None else datasource.name
+        )
 
         viz_type = form_data.get("viz_type")
         if not viz_type and datasource and datasource.default_endpoint:

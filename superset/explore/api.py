@@ -119,17 +119,10 @@ class ExploreRestApi(BaseSupersetApi):
             return self.response(200, result=result)
         except ValueError as ex:
             return self.response(400, message=str(ex))
-        except SupersetSecurityException as ex:
+        except (SupersetSecurityException, DatasetAccessDeniedError):
             return self.response(
                 403,
-                **ex.to_dict(),
-            )
-        except DatasetAccessDeniedError as ex:
-            return self.response(
-                403,
-                message=ex.message,
-                datasource_id=ex.datasource_id,
-                datasource_type=ex.datasource_type,
+                message="You don't have access to this dataset",
             )
         except (ChartNotFoundError, ExplorePermalinkGetFailedError) as ex:
             return self.response(404, message=str(ex))

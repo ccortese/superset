@@ -496,6 +496,19 @@ class Superset(BaseSupersetView):
                     datasource_id,
                 )
 
+            if datasource is None:
+                return json_error_response(
+                    _("You don't have access to this dataset"),
+                    status=403,
+                )
+            try:
+                security_manager.raise_for_access(datasource=datasource)
+            except SupersetSecurityException:
+                return json_error_response(
+                    _("You don't have access to this dataset"),
+                    status=403,
+                )
+
         datasource_name = datasource.name if datasource else _("[Missing Dataset]")
         viz_type = form_data.get("viz_type")
         if not viz_type and datasource and datasource.default_endpoint:
