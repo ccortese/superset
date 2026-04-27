@@ -3147,6 +3147,7 @@ def test_backtick_invalid_sql_still_fails() -> None:
         SQLScript(sql, "base")
 
 
+
 @pytest.mark.parametrize(
     "clause",
     [
@@ -3183,3 +3184,42 @@ def test_validate_rls_clause_rejects_injection(clause: str) -> None:
     """Malicious RLS clauses should be rejected."""
     with pytest.raises(QueryClauseValidationException):
         validate_rls_clause(clause)
+
+
+# =============================================================================
+# CVE-2024-53949: strip_sql_block_comments tests
+# =============================================================================
+
+
+@pytest.mark.parametrize(
+    "sql,expected",
+    [
+        ("SELECT VER/**/SION()", "SELECT VERSION()"),
+        ("SELECT LOAD/**/_EXTENSION('x')", "SELECT LOAD_EXTENSION('x')"),
+        ("SELECT VER/* bypass */SION()", "SELECT VERSION()"),
+        (
+            "SELECT V/**/E/**/R/**/S/**/I/**/O/**/N()",
+            "SELECT VERSION()",
+        ),
+        ("SELECT VERSION/*comment*/()", "SELECT VERSION()"),
+        ("SELECT 1", "SELECT 1"),
+        (
+            "SELECT /* multi\nline */ 1",
+            "SELECT  1",
+        ),
+    ],
+    ids=[
+        "empty_block_comment",
+        "comment_in_function_with_underscore",
+        "comment_with_text",
+        "multiple_inline_comments",
+        "comment_between_name_and_parens",
+        "no_comments",
+        "multi_line_comment",
+    ],
+)
+def test_strip_sql_block_comments(sql: str, expected: str) -> None:
+    """CVE-2024-53949: verify block comment stripping."""
+    from superset.sql.parse import strip_sql_block_comments
+
+    assert strip_sql_block_comments(sql) == expected

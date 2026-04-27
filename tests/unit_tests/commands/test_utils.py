@@ -20,7 +20,11 @@ from unittest.mock import call, MagicMock, patch
 
 import pytest
 
-from superset.commands.exceptions import TagForbiddenError, TagNotFoundValidationError
+from superset.commands.exceptions import (
+    ForbiddenError,
+    TagForbiddenError,
+    TagNotFoundValidationError,
+)
 from superset.commands.utils import (
     compute_owner_list,
     populate_owner_list,
@@ -28,6 +32,7 @@ from superset.commands.utils import (
     TagType,
     update_tags,
     User,
+    validate_owners_update,
     validate_tags,
 )
 from superset.tags.models import ObjectType
@@ -196,6 +201,86 @@ def test_compute_owner_list_no_owners_handle_none(mock_populate_owner_list):
 
     compute_owner_list(current_owners, new_owners)
     mock_populate_owner_list.assert_called_once_with(new_owners, default_to_user=False)
+
+
+def test_validate_owners_update_none_owner_ids_skips_check():
+    """
+    Test ``validate_owners_update`` is a no-op when new_owner_ids is None.
+    """
+    validate_owners_update([User(id=1)], None)
+
+
+@patch("superset.commands.utils.security_manager")
+@patch("superset.commands.utils.get_user_id")
+def test_validate_owners_update_same_owners_skips_check(mock_user_id, mock_sm):
+    """
+    Test ``validate_owners_update`` is a no-op when the owner set is unchanged.
+    """
+    mock_sm.is_admin = MagicMock(return_value=False)
+    mock_user_id.return_value = 99
+    validate_owners_update([User(id=1), User(id=2)], [1, 2])
+    mock_sm.is_admin.assert_not_called()
+
+
+@patch("superset.commands.utils.security_manager")
+@patch("superset.commands.utils.get_user_id")
+def test_validate_owners_update_admin_allowed(mock_user_id, mock_sm):
+    """
+    Test ``validate_owners_update`` allows admins to modify owners.
+    """
+    mock_sm.is_admin = MagicMock(return_value=True)
+    mock_user_id.return_value = 99
+    validate_owners_update([User(id=1)], [1, 99])
+
+
+@patch("superset.commands.utils.security_manager")
+@patch("superset.commands.utils.get_user_id")
+def test_validate_owners_update_existing_owner_allowed(mock_user_id, mock_sm):
+    """
+    Test ``validate_owners_update`` allows an existing owner to modify owners.
+    """
+    mock_sm.is_admin = MagicMock(return_value=False)
+    mock_user_id.return_value = 1
+    validate_owners_update([User(id=1), User(id=2)], [1, 2, 3])
+
+
+@patch("superset.commands.utils.security_manager")
+@patch("superset.commands.utils.get_user_id")
+def test_validate_owners_update_non_owner_forbidden(mock_user_id, mock_sm):
+    """
+    Test ``validate_owners_update`` raises ForbiddenError when a non-owner,
+    non-admin user attempts to modify ownership (CVE-2024-53951 regression).
+    """
+    mock_sm.is_admin = MagicMock(return_value=False)
+    mock_user_id.return_value = 99
+    with pytest.raises(ForbiddenError):
+        validate_owners_update([User(id=1), User(id=2)], [1, 2, 99])
+
+
+@patch("superset.commands.utils.security_manager")
+@patch("superset.commands.utils.get_user_id")
+def test_validate_owners_update_anonymous_forbidden(mock_user_id, mock_sm):
+    """
+    Test ``validate_owners_update`` raises ForbiddenError for anonymous users
+    attempting to modify ownership.
+    """
+    mock_sm.is_admin = MagicMock(return_value=False)
+    mock_user_id.return_value = None
+    with pytest.raises(ForbiddenError):
+        validate_owners_update([User(id=1)], [1, 2])
+
+
+@patch("superset.commands.utils.security_manager")
+@patch("superset.commands.utils.get_user_id")
+def test_validate_owners_update_non_owner_self_add_forbidden(mock_user_id, mock_sm):
+    """
+    Test ``validate_owners_update`` prevents a read-only user from adding
+    themselves as owner (CVE-2024-53951 regression).
+    """
+    mock_sm.is_admin = MagicMock(return_value=False)
+    mock_user_id.return_value = 99
+    with pytest.raises(ForbiddenError):
+        validate_owners_update([User(id=1)], [1, 99])
 
 
 @pytest.mark.parametrize("object_type", OBJECT_TYPES)
