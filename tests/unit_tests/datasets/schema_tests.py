@@ -156,3 +156,45 @@ def test_import_v1_metric_schema_parses_currency_string() -> None:
     }
     result = schema.load(data)
     assert result["currency"] == {"symbol": "CAD", "symbolPosition": "suffix"}
+
+
+def test_dataset_columns_put_schema_sanitizes_xss_in_verbose_name() -> None:
+    """Regression test for CVE-2024-53947: XSS via column verbose_name."""
+    from superset.datasets.schemas import DatasetColumnsPutSchema
+
+    schema = DatasetColumnsPutSchema()
+    data = {
+        "column_name": "revenue",
+        "verbose_name": "<img src=x onerror=alert(document.cookie)>",
+    }
+    result = schema.load(data)
+    assert "<" not in result["verbose_name"]
+    assert "onerror" not in result["verbose_name"]
+
+
+def test_dataset_columns_put_schema_preserves_plain_verbose_name() -> None:
+    """Plain-text verbose_name values pass through unchanged."""
+    from superset.datasets.schemas import DatasetColumnsPutSchema
+
+    schema = DatasetColumnsPutSchema()
+    data = {
+        "column_name": "revenue",
+        "verbose_name": "Revenue (USD)",
+    }
+    result = schema.load(data)
+    assert result["verbose_name"] == "Revenue (USD)"
+
+
+def test_dataset_metrics_put_schema_sanitizes_xss_in_verbose_name() -> None:
+    """Regression test for CVE-2024-53947: XSS via metric verbose_name."""
+    from superset.datasets.schemas import DatasetMetricsPutSchema
+
+    schema = DatasetMetricsPutSchema()
+    data = {
+        "expression": "SUM(amount)",
+        "metric_name": "sum_amount",
+        "verbose_name": '<script>alert("xss")</script>Total',
+    }
+    result = schema.load(data)
+    assert "<" not in result["verbose_name"]
+    assert "Total" in result["verbose_name"]

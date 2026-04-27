@@ -22,6 +22,7 @@ from flask_babel import lazy_gettext as _
 from marshmallow import (
     fields,
     post_dump,
+    post_load,
     pre_load,
     Schema,
     validates_schema,
@@ -34,6 +35,7 @@ from superset.connectors.sqla.models import SqlaTable
 from superset.exceptions import SupersetMarshmallowValidationError
 from superset.models.sql_types import parse_currency_string
 from superset.utils import json
+from superset.utils.core import sanitize_user_label
 
 get_delete_ids_schema = {"type": "array", "items": {"type": "integer"}}
 get_export_ids_schema = {"type": "array", "items": {"type": "integer"}}
@@ -92,6 +94,12 @@ class DatasetColumnsPutSchema(Schema):
     )
     uuid = fields.UUID(allow_none=True)
 
+    @post_load
+    def sanitize_labels(self, data: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
+        if "verbose_name" in data:
+            data["verbose_name"] = sanitize_user_label(data["verbose_name"])
+        return data
+
 
 class DatasetMetricCurrencyPutSchema(Schema):
     symbol = fields.String(validate=Length(1, 128))
@@ -124,6 +132,12 @@ class DatasetMetricsPutSchema(Schema):
     verbose_name = fields.String(allow_none=True, metadata={Length: (1, 1024)})
     warning_text = fields.String(allow_none=True)
     uuid = fields.UUID(allow_none=True)
+
+    @post_load
+    def sanitize_labels(self, data: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
+        if "verbose_name" in data:
+            data["verbose_name"] = sanitize_user_label(data["verbose_name"])
+        return data
 
 
 class FolderSchema(Schema):
@@ -276,6 +290,12 @@ class ImportV1ColumnSchema(Schema):
     python_date_format = fields.String(allow_none=True)
     datetime_format = fields.String(allow_none=True)
 
+    @post_load
+    def sanitize_labels(self, data: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
+        if "verbose_name" in data:
+            data["verbose_name"] = sanitize_user_label(data["verbose_name"])
+        return data
+
 
 class ImportMetricCurrencySchema(Schema):
     symbol = fields.String(validate=Length(1, 128))
@@ -303,6 +323,12 @@ class ImportV1MetricSchema(Schema):
     currency = CurrencyField(ImportMetricCurrencySchema, allow_none=True)
     extra = fields.Dict(allow_none=True)
     warning_text = fields.String(allow_none=True)
+
+    @post_load
+    def sanitize_labels(self, data: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
+        if "verbose_name" in data:
+            data["verbose_name"] = sanitize_user_label(data["verbose_name"])
+        return data
 
 
 class ImportV1DatasetSchema(Schema):

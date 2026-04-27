@@ -58,6 +58,7 @@ from sqlalchemy.orm import (
     reconstructor,
     relationship,
     RelationshipProperty,
+    validates,
 )
 from sqlalchemy.orm.mapper import Mapper
 from sqlalchemy.schema import UniqueConstraint
@@ -115,6 +116,7 @@ from superset.superset_typing import (
 )
 from superset.utils import core as utils, json
 from superset.utils.backports import StrEnum
+from superset.utils.core import sanitize_user_label
 
 config = current_app.config  # Backward compatibility for tests
 metadata = Model.metadata  # pylint: disable=no-member
@@ -891,6 +893,10 @@ class TableColumn(AuditMixinNullable, ImportExportMixin, CertificationMixin, Mod
     update_from_object_fields = [s for s in export_fields if s not in ("table_id",)]
     export_parent = "table"
 
+    @validates("verbose_name")
+    def strip_html_from_verbose_name(self, key: str, value: str | None) -> str | None:
+        return sanitize_user_label(value)
+
     def __init__(self, **kwargs: Any) -> None:
         """
         Construct a TableColumn object.
@@ -1126,6 +1132,10 @@ class SqlMetric(AuditMixinNullable, ImportExportMixin, CertificationMixin, Model
     ]
     update_from_object_fields = [s for s in export_fields if s != "table_id"]
     export_parent = "table"
+
+    @validates("verbose_name")
+    def strip_html_from_verbose_name(self, key: str, value: str | None) -> str | None:
+        return sanitize_user_label(value)
 
     def __repr__(self) -> str:
         return str(self.metric_name)

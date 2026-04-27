@@ -646,8 +646,9 @@ def test_get_user_agent(mocker: MockerFixture, app_context: None) -> None:
 
 @with_config(
     {
-        "USER_AGENT_FUNC": lambda database,
-        source: f"{database.database_name} {source.name}"
+        "USER_AGENT_FUNC": lambda database, source: (
+            f"{database.database_name} {source.name}"
+        )
     }
 )
 def test_get_user_agent_custom(mocker: MockerFixture, app_context: None) -> None:
@@ -1688,3 +1689,41 @@ def test_sanitize_url_blocks_dangerous():
     """Test that dangerous URL schemes are blocked."""
     assert sanitize_url("javascript:alert('xss')") == ""
     assert sanitize_url("data:text/html,<script>alert(1)</script>") == ""
+
+
+def test_sanitize_user_label_strips_xss_payload():
+    """Regression test for CVE-2024-53947: stored XSS via column labels."""
+    from superset.utils.core import sanitize_user_label
+
+    xss = "<img src=x onerror=alert(document.cookie)>"
+    result = sanitize_user_label(xss)
+    assert "<" not in result
+    assert "onerror" not in result
+    assert "script" not in result.lower()
+
+
+def test_sanitize_user_label_preserves_plain_text():
+    from superset.utils.core import sanitize_user_label
+
+    assert sanitize_user_label("Revenue (USD)") == "Revenue (USD)"
+    assert sanitize_user_label("column_name") == "column_name"
+    assert sanitize_user_label("") == ""
+    assert sanitize_user_label(None) is None
+
+
+def test_sanitize_user_label_strips_script_tags():
+    from superset.utils.core import sanitize_user_label
+
+    assert (
+        "script"
+        not in sanitize_user_label('<script>alert("xss")</script>Label').lower()
+    )
+    assert "Label" in sanitize_user_label('<script>alert("xss")</script>Label')
+
+
+def test_sanitize_user_label_strips_nested_html():
+    from superset.utils.core import sanitize_user_label
+
+    result = sanitize_user_label("<div><b>bold</b></div>")
+    assert "<" not in result
+    assert "bold" in result

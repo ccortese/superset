@@ -534,6 +534,23 @@ def markdown(raw: str, markup_wrap: bool | None = False) -> str:
     return safe
 
 
+def sanitize_user_label(value: str | None) -> str | None:
+    """Strip all HTML tags from a user-supplied label to prevent stored XSS.
+
+    Uses nh3 with an empty tag allowlist so every HTML element is removed
+    while plain-text content is preserved.
+
+    Args:
+        value: Raw label string (e.g. column verbose_name, metric label).
+
+    Returns:
+        The label with all HTML markup stripped, or None if the input was None.
+    """
+    if value is None:
+        return None
+    return nh3.clean(value, tags=set())
+
+
 def sanitize_svg_content(svg_content: str) -> str:
     """Basic SVG protection - remove obvious XSS vectors, trust admin input otherwise.
 
