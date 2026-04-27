@@ -302,6 +302,10 @@ SQLGLOT_DIALECTS_EXTENSIONS: DialectExtensions | Callable[[], DialectExtensions]
 QUERY_SEARCH_LIMIT = 1000
 
 # Flask-WTF flag for CSRF
+# CSRF protection is essential for preventing cross-site request forgery attacks
+# where a malicious site tricks an authenticated user's browser into making
+# unwanted state-changing requests (e.g. modifying dashboards, executing queries).
+# Disabling this exposes all authenticated endpoints to CSRF exploits.
 WTF_CSRF_ENABLED = True
 
 # Add endpoints that need to be exempt from CSRF protection
