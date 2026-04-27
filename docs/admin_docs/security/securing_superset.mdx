@@ -37,6 +37,34 @@ This is the most critical security setting for your Superset instance. It is use
 >
 > **NEVER** reuse the same `SUPERSET_SECRET_KEY` across different environments (e.g., development, staging, production) or different Superset instances. Reusing a key allows cryptographically signed session cookies to be used across those instances, which can lead to a full authentication bypass if a cookie is compromised. Treat this key like a master password.
 
+### **Debug Mode Protection (CRITICAL)**
+
+> #### ⚠️ Warning: Debug Mode Enables Remote Code Execution
+>
+> Setting `FLASK_DEBUG=1` or `DEBUG=True` in your Superset configuration enables the Werkzeug interactive debugger. This debugger exposes a Python REPL at any unhandled exception endpoint, allowing **arbitrary code execution** on the server — even without authentication. The debugger PIN can be bypassed by an attacker with knowledge of the server environment. **Debug mode must never be enabled in production.**
+
+Superset includes built-in safeguards to prevent debug mode from running in production:
+
+* **Startup check:** If `FLASK_DEBUG=1` is detected alongside `SUPERSET_ENV=production` or a production WSGI server (e.g., gunicorn), Superset logs a `CRITICAL` error and refuses to start.
+* **Docker protection:** The production Docker image explicitly sets `FLASK_DEBUG=0`, and the `run-server.sh` entrypoint rejects any attempt to override it.
+
+**Recommended configuration for production:**
+
+```python
+# superset_config.py
+# Ensure debug mode is explicitly disabled
+DEBUG = False
+SHOW_STACKTRACE = False
+```
+
+```bash
+# Environment variables
+export FLASK_DEBUG=0
+export SUPERSET_ENV=production
+```
+
+If you need to debug issues in production, use structured logging and a centralized log management system rather than enabling the interactive debugger.
+
 ### **Session Management Security (CRITICAL)**
 
 Properly configuring user sessions is essential to prevent session hijacking and ensure that sessions are terminated correctly.
@@ -150,7 +178,8 @@ Here's the documentation section how how to set up Talisman: https://superset.ap
   - [ ] Server-side session management is configured (e.g., Redis).
   - [ ] `PERMANENT_SESSION_LIFETIME` is set to a short duration (e.g., 8 hours).
   - [ ] All session cookie security flags (`Secure`, `HttpOnly`, `SameSite`) are enabled.
-  - [ ] `DEBUG` mode is set to `False`.
+  - [ ] `DEBUG` mode is set to `False` and `FLASK_DEBUG=0` is set in the environment.
+  - [ ] `SHOW_STACKTRACE` is set to `False`.
   - [ ] Talisman is explicitly enabled and configured with a strict Content Security Policy.
   - [ ] Database connections use dedicated, limited-privilege accounts.
   - [ ] Authentication is integrated with an enterprise identity provider (OAuth/LDAP).

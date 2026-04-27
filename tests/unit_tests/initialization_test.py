@@ -16,8 +16,10 @@
 # under the License.
 
 import os
+import sys
 from unittest.mock import MagicMock, patch
 
+import pytest
 from sqlalchemy.exc import OperationalError
 
 from superset.app import AppRootMiddleware, create_app, SupersetApp
@@ -257,3 +259,79 @@ class TestCreateAppRoot:
 
         assert isinstance(app.wsgi_app, AppRootMiddleware)
         assert app.wsgi_app.app_root == "/from-param"
+
+
+class TestCheckDebugMode:
+    """Tests for the debug mode production safety check."""
+
+    def _make_initializer(self, *, debug: bool = False, testing: bool = False):
+        mock_app = MagicMock()
+        mock_app.debug = debug
+        mock_app.config = {"TESTING": testing}
+        return SupersetAppInitializer(mock_app)
+
+    def test_no_op_when_debug_is_off(self):
+        """check_debug_mode should be a no-op when DEBUG is False."""
+        init = self._make_initializer(debug=False)
+        # Should not raise or exit
+        init.check_debug_mode()
+
+    def test_no_op_when_testing(self):
+        """check_debug_mode should allow debug in test environments."""
+        init = self._make_initializer(debug=True, testing=True)
+        init.check_debug_mode()
+
+    @patch.dict(os.environ, {"SUPERSET_TESTENV": "true"}, clear=False)
+    def test_no_op_when_superset_testenv(self):
+        """check_debug_mode should allow debug when SUPERSET_TESTENV=true."""
+        init = self._make_initializer(debug=True)
+        init.check_debug_mode()
+
+    @patch("superset.initialization.logger")
+    @patch.dict(
+        os.environ,
+        {"SUPERSET_ENV": "production", "SUPERSET_TESTENV": ""},
+        clear=False,
+    )
+    def test_exits_when_debug_in_production_env(self, mock_logger):
+        """check_debug_mode should sys.exit(1) when DEBUG + SUPERSET_ENV=production."""
+        init = self._make_initializer(debug=True)
+        with pytest.raises(SystemExit) as exc_info:
+            init.check_debug_mode()
+        assert exc_info.value.code == 1
+        mock_logger.critical.assert_called()
+
+    @patch("superset.initialization.logger")
+    @patch.dict(
+        os.environ,
+        {"SUPERSET_ENV": "", "SUPERSET_TESTENV": ""},
+        clear=False,
+    )
+    def test_exits_when_debug_with_gunicorn(self, mock_logger):
+        """check_debug_mode should sys.exit(1) when running under gunicorn."""
+        init = self._make_initializer(debug=True)
+        original_argv = sys.argv[0]
+        try:
+            sys.argv[0] = "/usr/bin/gunicorn"
+            with pytest.raises(SystemExit) as exc_info:
+                init.check_debug_mode()
+            assert exc_info.value.code == 1
+        finally:
+            sys.argv[0] = original_argv
+
+    @patch("superset.initialization.logger")
+    @patch.dict(
+        os.environ,
+        {"SUPERSET_ENV": "development", "SUPERSET_TESTENV": ""},
+        clear=False,
+    )
+    def test_warns_in_non_production_debug(self, mock_logger):
+        """check_debug_mode should warn (not exit) in dev environments."""
+        init = self._make_initializer(debug=True)
+        original_argv = sys.argv[0]
+        try:
+            sys.argv[0] = "python"
+            init.check_debug_mode()
+        finally:
+            sys.argv[0] = original_argv
+        mock_logger.warning.assert_called()

@@ -19,6 +19,15 @@
 #
 HYPHEN_SYMBOL='-'
 
+# Prevent debug mode from being enabled in production containers.
+# The Werkzeug interactive debugger allows arbitrary code execution.
+if [ "${FLASK_DEBUG}" = "1" ] || [ "${FLASK_DEBUG}" = "true" ] || [ "${FLASK_DEBUG}" = "True" ]; then
+    echo "FATAL: FLASK_DEBUG is enabled. The Werkzeug interactive debugger allows" >&2
+    echo "arbitrary remote code execution. Refusing to start gunicorn." >&2
+    echo "To fix: unset FLASK_DEBUG or set FLASK_DEBUG=0" >&2
+    exit 1
+fi
+
 gunicorn \
     --bind "${SUPERSET_BIND_ADDRESS:-0.0.0.0}:${SUPERSET_PORT:-8088}" \
     --access-logfile "${ACCESS_LOG_FILE:-$HYPHEN_SYMBOL}" \
