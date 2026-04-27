@@ -21,7 +21,9 @@ HYPHEN_SYMBOL='-'
 
 # Prevent debug mode from being enabled in production containers.
 # The Werkzeug interactive debugger allows arbitrary code execution.
-if [ "${FLASK_DEBUG}" = "1" ] || [ "${FLASK_DEBUG}" = "true" ] || [ "${FLASK_DEBUG}" = "True" ]; then
+# Match all truthy values accepted by Python's parse_boolean_string().
+FLASK_DEBUG_LOWER=$(echo "${FLASK_DEBUG}" | tr '[:upper:]' '[:lower:]')
+if [ "${FLASK_DEBUG_LOWER}" = "1" ] || [ "${FLASK_DEBUG_LOWER}" = "true" ] || [ "${FLASK_DEBUG_LOWER}" = "t" ] || [ "${FLASK_DEBUG_LOWER}" = "yes" ] || [ "${FLASK_DEBUG_LOWER}" = "y" ] || [ "${FLASK_DEBUG_LOWER}" = "on" ]; then
     echo "FATAL: FLASK_DEBUG is enabled. The Werkzeug interactive debugger allows" >&2
     echo "arbitrary remote code execution. Refusing to start gunicorn." >&2
     echo "To fix: unset FLASK_DEBUG or set FLASK_DEBUG=0" >&2
