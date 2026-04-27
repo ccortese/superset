@@ -16,11 +16,14 @@
 # under the License.
 
 
-from marshmallow import fields, Schema
+from marshmallow import fields, Schema, validates
+from marshmallow.exceptions import ValidationError as MarshmallowValidationError
 from marshmallow.validate import Length, OneOf
 
 from superset.connectors.sqla.models import RowLevelSecurityFilter
 from superset.dashboards.schemas import UserSchema
+from superset.exceptions import QueryClauseValidationException
+from superset.sql.parse import validate_rls_clause
 from superset.utils.core import RowLevelSecurityFilterType
 
 id_description = "Unique if of rls filter"
@@ -143,6 +146,13 @@ class RLSPostSchema(Schema):
         metadata={"description": "clause_description"}, required=True, allow_none=False
     )
 
+    @validates("clause")
+    def validate_clause(self, value: str) -> None:
+        try:
+            validate_rls_clause(value)
+        except QueryClauseValidationException as ex:
+            raise MarshmallowValidationError(str(ex)) from ex
+
 
 class RLSPutSchema(Schema):
     name = fields.String(
@@ -184,3 +194,10 @@ class RLSPutSchema(Schema):
     clause = fields.String(
         metadata={"description": "clause_description"}, required=False, allow_none=False
     )
+
+    @validates("clause")
+    def validate_clause(self, value: str) -> None:
+        try:
+            validate_rls_clause(value)
+        except QueryClauseValidationException as ex:
+            raise MarshmallowValidationError(str(ex)) from ex

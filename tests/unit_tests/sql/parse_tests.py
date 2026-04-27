@@ -40,6 +40,7 @@ from superset.sql.parse import (
     SQLStatement,
     Table,
     tokenize_kql,
+    validate_rls_clause,
 )
 from tests.integration_tests.conftest import with_feature_flags
 
@@ -3144,6 +3145,45 @@ def test_backtick_invalid_sql_still_fails() -> None:
     sql = "SELECT * FROM `table` WHERE"
     with pytest.raises(SupersetParseError):
         SQLScript(sql, "base")
+
+
+
+@pytest.mark.parametrize(
+    "clause",
+    [
+        "client_id = 9",
+        "1 = 0",
+        "region = 'Europe'",
+        "department IN ('Finance', 'Marketing')",
+        "status IS NOT NULL",
+        "age BETWEEN 18 AND 65",
+        "name LIKE '%test%'",
+        "client_id = 9 AND status = 'active'",
+        "client_id = 9 OR status = 'active'",
+    ],
+)
+def test_validate_rls_clause_allows_valid_predicates(clause: str) -> None:
+    """Valid RLS predicates should pass validation."""
+    result = validate_rls_clause(clause)
+    assert result == clause.strip()
+
+
+@pytest.mark.parametrize(
+    "clause",
+    [
+        "id IN (SELECT id FROM secret_table)",
+        "1=1 UNION SELECT password FROM users",
+        "1=1 UNION ALL SELECT * FROM users",
+        "1=1; DROP TABLE users",
+        "1=1; DELETE FROM users",
+        "",
+        "   ",
+    ],
+)
+def test_validate_rls_clause_rejects_injection(clause: str) -> None:
+    """Malicious RLS clauses should be rejected."""
+    with pytest.raises(QueryClauseValidationException):
+        validate_rls_clause(clause)
 
 
 # =============================================================================

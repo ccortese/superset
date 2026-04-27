@@ -1585,6 +1585,63 @@ def sanitize_clause(clause: str, engine: str) -> str:
         raise QueryClauseValidationException(f"Invalid SQL clause: {clause}") from ex
 
 
+def validate_rls_clause(clause: str) -> str:
+    """
+    Validate that an RLS clause does not contain SQL injection patterns.
+
+    Rejects subqueries, UNION/INTERSECT/EXCEPT, stacked statements,
+    and DML/DDL operations. Only simple predicates (comparisons, IN lists,
+    boolean logic, LIKE, BETWEEN, IS NULL, etc.) are allowed.
+
+    :param clause: The RLS SQL clause to validate.
+    :returns: The clause unchanged if valid.
+    :raises QueryClauseValidationException: If the clause contains
+        disallowed SQL constructs.
+    """
+    stripped = clause.strip()
+    if not stripped:
+        raise QueryClauseValidationException("RLS clause must not be empty.")
+
+    if ";" in stripped:
+        raise QueryClauseValidationException(
+            "RLS clause must not contain multiple statements."
+        )
+
+    try:
+        parsed = sqlglot.parse_one(stripped, into=exp.Condition)
+    except sqlglot.errors.ParseError:
+        try:
+            parsed = sqlglot.parse_one(stripped)
+        except sqlglot.errors.ParseError as ex:
+            raise QueryClauseValidationException(
+                f"Invalid SQL in RLS clause: {clause}"
+            ) from ex
+
+    _disallowed_expression_types: tuple[type[exp.Expression], ...] = (
+        exp.Select,
+        exp.Subquery,
+        exp.Union,
+        exp.Intersect,
+        exp.Except,
+        exp.Insert,
+        exp.Update,
+        exp.Delete,
+        exp.Drop,
+        exp.Create,
+        exp.Alter,
+        exp.Command,
+    )
+
+    for node in parsed.walk():
+        if isinstance(node, _disallowed_expression_types):
+            raise QueryClauseValidationException(
+                "RLS clause must not contain subqueries, set operations "
+                "(UNION/INTERSECT/EXCEPT), or data-modifying statements."
+            )
+
+    return stripped
+
+
 def transpile_to_dialect(
     sql: str,
     target_engine: str,
