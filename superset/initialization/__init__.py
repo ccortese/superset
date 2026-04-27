@@ -37,7 +37,7 @@ from flask_compress import Compress
 from flask_session import Session
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from superset.constants import CHANGE_ME_SECRET_KEY
+from superset.constants import CHANGE_ME_SECRET_KEY, KNOWN_WEAK_SECRET_KEYS
 from superset.databases.utils import make_url_safe
 from superset.extensions import (
     _event_logger,
@@ -641,7 +641,8 @@ class SupersetAppInitializer:  # pylint: disable=too-many-public-methods
             )
             logger.warning(bottom_banner)
 
-        if self.config["SECRET_KEY"] == CHANGE_ME_SECRET_KEY:
+        secret_key: str = self.config["SECRET_KEY"]
+        if secret_key in KNOWN_WEAK_SECRET_KEYS or secret_key == CHANGE_ME_SECRET_KEY:
             if (
                 self.superset_app.debug
                 or self.superset_app.config["TESTING"]
@@ -651,8 +652,19 @@ class SupersetAppInitializer:  # pylint: disable=too-many-public-methods
                 log_default_secret_key_warning()
                 return
             log_default_secret_key_warning()
-            logger.error("Refusing to start due to insecure SECRET_KEY")
+            logger.error(
+                "Refusing to start due to insecure SECRET_KEY. "
+                "The configured SECRET_KEY matches a known weak default "
+                "(CVE-2023-27524). Please generate a strong random key: "
+                "openssl rand -base64 42"
+            )
             sys.exit(1)
+
+        if len(secret_key) < 16:
+            logger.warning(
+                "SECRET_KEY is shorter than 16 characters. "
+                "Consider using a longer key for adequate security."
+            )
 
     def configure_session(self) -> None:
         if self.config["SESSION_SERVER_SIDE"]:
