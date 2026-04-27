@@ -625,6 +625,53 @@ class SupersetAppInitializer:  # pylint: disable=too-many-public-methods
 
         self.init_all_dependencies_and_extensions()
 
+    def check_debug_mode(self) -> None:
+        """Prevent debug mode from running in production environments.
+
+        When DEBUG is True, Flask enables the Werkzeug interactive debugger
+        which allows arbitrary code execution via the debugger PIN bypass.
+        This check detects production-like environments and refuses to start
+        if debug mode is enabled.
+        """
+        if not self.superset_app.debug:
+            return
+
+        # Allow debug mode in test environments
+        if self.superset_app.config.get("TESTING") or is_test():
+            return
+
+        superset_env = os.environ.get("SUPERSET_ENV", "").lower()
+        is_production_env = superset_env == "production"
+
+        # Detect WSGI servers (gunicorn, uwsgi, etc.) as a production signal
+        is_wsgi_server = (
+            "gunicorn" in os.environ.get("SERVER_SOFTWARE", "").lower()
+            or "gunicorn" in sys.argv[0].lower()
+            or "uwsgi" in sys.modules
+        )
+
+        if is_production_env or is_wsgi_server:
+            banner = 80 * "-"
+            logger.critical(banner)
+            logger.critical(
+                "FATAL: DEBUG mode is enabled in a production environment. "
+                "The Werkzeug interactive debugger allows arbitrary remote "
+                "code execution. Refusing to start."
+            )
+            logger.critical(
+                "To fix: set FLASK_DEBUG=0 or remove FLASK_DEBUG from your "
+                "environment. If you intended to run in development mode, set "
+                "SUPERSET_ENV=development instead of 'production'."
+            )
+            logger.critical(banner)
+            sys.exit(1)
+
+        # Warn in non-production environments where debug is on
+        logger.warning(
+            "DEBUG mode is enabled. The Werkzeug interactive debugger is active. "
+            "Do NOT use this in a publicly accessible deployment."
+        )
+
     def check_secret_key(self) -> None:
         def log_default_secret_key_warning() -> None:
             top_banner = 80 * "-" + "\n" + 36 * " " + "WARNING\n" + 80 * "-"
@@ -731,6 +778,7 @@ class SupersetAppInitializer:  # pylint: disable=too-many-public-methods
         order to fully init the app
         """
         self.pre_init()
+        self.check_debug_mode()
         self.check_secret_key()
         self.configure_session()
         # Configuration of logging must be done first to apply the formatter properly

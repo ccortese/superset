@@ -146,6 +146,7 @@ FROM python-base AS python-common
 ENV SUPERSET_HOME="/app/superset_home" \
     HOME="/app/superset_home" \
     SUPERSET_ENV="production" \
+    FLASK_DEBUG="0" \
     FLASK_APP="superset.app:create_app()" \
     PYTHONPATH="/app/pythonpath" \
     SUPERSET_PORT="8088"
