@@ -335,7 +335,10 @@ class SnowflakeEngineSpec(PostgresBaseEngineSpec):
         :return: True if query cancelled successfully, False otherwise
         """
         try:
-            cursor.execute(f"SELECT SYSTEM$CANCEL_ALL_QUERIES({cancel_query_id})")
+            cursor.execute(
+                "SELECT SYSTEM$CANCEL_ALL_QUERIES(%s)",
+                (int(cancel_query_id),),
+            )
         except Exception:  # pylint: disable=broad-except
             return False
 
