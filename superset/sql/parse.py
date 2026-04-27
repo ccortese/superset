@@ -47,6 +47,27 @@ from sqlglot.optimizer.scope import (
 from superset.exceptions import QueryClauseValidationException, SupersetParseError
 from superset.sql.dialects import DB2, Dremio, Firebolt, OpenSearch, Pinot
 
+# Regex to match C-style block comments (/* ... */), including nested content.
+# Uses re.DOTALL so '.' matches newlines inside multi-line comments.
+BLOCK_COMMENT_RE = re.compile(r"/\*.*?\*/", re.DOTALL)
+
+
+def strip_sql_block_comments(sql: str) -> str:
+    """
+    Strip C-style block comments (``/* ... */``) from a SQL string.
+
+    SQL engines silently remove block comments before execution, so an
+    attacker can embed them inside identifier names (e.g. ``VER/**/SION()``)
+    to bypass denylist checks that operate on the raw text.  Normalizing the
+    SQL by removing these comments first ensures the denylist sees the same
+    tokens the database engine will execute.
+
+    :param sql: Raw SQL text, possibly containing block comments.
+    :returns: SQL with all ``/* ... */`` sequences removed.
+    """
+    return BLOCK_COMMENT_RE.sub("", sql)
+
+
 if TYPE_CHECKING:
     from superset.models.core import Database
 

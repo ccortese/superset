@@ -350,6 +350,50 @@ def test_execute_allowed_functions(
     assert result.status == QueryStatus.SUCCESS
 
 
+# =============================================================================
+# CVE-2024-53949: DISALLOWED_SQL_FUNCTIONS bypass via inline block comments
+# =============================================================================
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "SELECT VER/**/SION()",
+        "SELECT LOAD/**/_EXTENSION('evil.so')",
+        "SELECT VER/* bypass */SION()",
+        "SELECT V/**/E/**/R/**/S/**/I/**/O/**/N()",
+        "SELECT VERSION/*comment*/()",
+    ],
+    ids=[
+        "empty_block_comment_inside_name",
+        "empty_block_comment_inside_name_with_underscore",
+        "block_comment_with_text_inside_name",
+        "multiple_block_comments_inside_name",
+        "block_comment_between_name_and_parens",
+    ],
+)
+def test_execute_disallowed_functions_inline_comment_bypass(
+    mocker: MockerFixture, database: Database, app_context: None, sql: str
+) -> None:
+    """CVE-2024-53949: inline block comments must not bypass the denylist."""
+    mocker.patch.dict(
+        current_app.config,
+        {
+            "SQL_QUERY_MUTATOR": None,
+            "SQLLAB_TIMEOUT": 30,
+            "DISALLOWED_SQL_FUNCTIONS": {
+                "sqlite": {"VERSION", "LOAD_EXTENSION"},
+            },
+        },
+    )
+
+    result = database.execute(sql)
+
+    assert result.status == QueryStatus.FAILED
+    assert result.error_message is not None
+    assert "Disallowed SQL functions" in result.error_message
+
+
 def test_execute_disallowed_tables(
     mocker: MockerFixture, database: Database, app_context: None
 ) -> None:
