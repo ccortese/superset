@@ -81,6 +81,7 @@ from superset.db_engine_specs.base import BaseEngineSpec, TimestampExpression
 from superset.exceptions import (
     ColumnNotFoundException,
     DatasetInvalidPermissionEvaluationException,
+    QueryClauseValidationException,
     QueryObjectValidationError,
     SupersetGenericDBErrorException,
     SupersetSecurityException,
@@ -104,7 +105,7 @@ from superset.models.helpers import (
 )
 from superset.models.slice import Slice
 from superset.models.sql_types.base import CurrencyType
-from superset.sql.parse import Table
+from superset.sql.parse import Table, validate_rls_clause
 from superset.superset_typing import (
     AdhocColumn,
     AdhocMetric,
@@ -760,9 +761,9 @@ class BaseDatasource(
         filter_groups: dict[Union[int, str], list[TextClause]] = defaultdict(list)
         try:
             for filter_ in security_manager.get_rls_filters(self):
-                clause = self.text(
-                    f"({template_processor.process_template(filter_.clause)})"
-                )
+                rendered = template_processor.process_template(filter_.clause)
+                validate_rls_clause(rendered)
+                clause = self.text(f"({rendered})")
                 if filter_.group_key:
                     filter_groups[filter_.group_key].append(clause)
                 else:
@@ -772,14 +773,21 @@ class BaseDatasource(
                 for rule in security_manager.get_guest_rls_filters(self):
                     if not include_global_guest_rls and not rule.get("dataset"):
                         continue
-                    clause = self.text(
-                        f"({template_processor.process_template(rule['clause'])})"
-                    )
+                    rendered = template_processor.process_template(rule["clause"])
+                    validate_rls_clause(rendered)
+                    clause = self.text(f"({rendered})")
                     all_filters.append(clause)
 
             grouped_filters = [or_(*clauses) for clauses in filter_groups.values()]
             all_filters.extend(grouped_filters)
             return all_filters
+        except QueryClauseValidationException as ex:
+            raise QueryObjectValidationError(
+                _(
+                    "Invalid RLS clause rejected: %(msg)s",
+                    msg=str(ex),
+                )
+            ) from ex
         except (TemplateError, SupersetSyntaxErrorException) as ex:
             msg = getattr(ex, "message", str(ex))
             raise QueryObjectValidationError(

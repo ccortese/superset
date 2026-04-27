@@ -25,7 +25,9 @@ from superset.commands.security.exceptions import RLSRuleNotFoundError
 from superset.commands.utils import populate_roles
 from superset.connectors.sqla.models import RowLevelSecurityFilter, SqlaTable
 from superset.daos.security import RLSDAO
+from superset.exceptions import QueryClauseValidationException
 from superset.extensions import db
+from superset.sql.parse import validate_rls_clause
 from superset.utils.decorators import transaction
 
 logger = logging.getLogger(__name__)
@@ -49,6 +51,11 @@ class UpdateRLSRuleCommand(BaseCommand):
         self._model = RLSDAO.find_by_id(int(self._model_id))
         if not self._model:
             raise RLSRuleNotFoundError()
+        if (clause := self._properties.get("clause")) is not None:
+            try:
+                validate_rls_clause(clause)
+            except QueryClauseValidationException as ex:
+                raise QueryClauseValidationException(str(ex)) from ex
         roles = populate_roles(self._roles)
         tables = (
             db.session.query(SqlaTable)

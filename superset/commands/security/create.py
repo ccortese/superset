@@ -24,7 +24,9 @@ from superset.commands.exceptions import DatasourceNotFoundValidationError
 from superset.commands.utils import populate_roles
 from superset.connectors.sqla.models import SqlaTable
 from superset.daos.security import RLSDAO
+from superset.exceptions import QueryClauseValidationException
 from superset.extensions import db
+from superset.sql.parse import validate_rls_clause
 from superset.utils.decorators import transaction
 
 logger = logging.getLogger(__name__)
@@ -42,6 +44,11 @@ class CreateRLSRuleCommand(BaseCommand):
         return RLSDAO.create(attributes=self._properties)
 
     def validate(self) -> None:
+        clause = self._properties.get("clause", "")
+        try:
+            validate_rls_clause(clause)
+        except QueryClauseValidationException as ex:
+            raise QueryClauseValidationException(str(ex)) from ex
         roles = populate_roles(self._roles)
         tables = (
             db.session.query(SqlaTable)
