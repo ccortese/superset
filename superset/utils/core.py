@@ -47,6 +47,7 @@ from email.mime.text import MIMEText
 from email.utils import formatdate
 from enum import Enum, IntEnum
 from io import BytesIO
+from pathlib import PurePosixPath
 from timeit import default_timer
 from types import TracebackType
 from typing import (
@@ -2089,24 +2090,41 @@ def create_zip(files: dict[str, Any]) -> BytesIO:
 
 
 def check_is_safe_zip(zip_file: ZipFile) -> None:
-    """
-    Checks whether a ZIP file is safe, raises SupersetException if not.
+    """Checks whether a ZIP file is safe, raises SupersetException if not."""
+    blocked_extensions: set[str] = app.config.get("ZIP_FILE_BLOCKED_EXTENSIONS", set())
+    max_entries: int = app.config.get("ZIP_FILE_MAX_ENTRIES", 10_000)
+    max_total_size: int = app.config.get("ZIP_FILE_MAX_TOTAL_SIZE", 512 * 1024 * 1024)
 
-    :param zip_file:
-    :return:
-    """
-    # pylint: disable=import-outside-toplevel
+    entries = zip_file.infolist()
+    if len(entries) > max_entries:
+        raise SupersetException(
+            f"ZIP file contains too many entries (limit: {max_entries})"
+        )
 
     uncompress_size = 0
     compress_size = 0
-    for zip_file_element in zip_file.infolist():
+    for zip_file_element in entries:
         if zip_file_element.file_size > app.config["ZIPPED_FILE_MAX_SIZE"]:
             raise SupersetException("Found file with size above allowed threshold")
+
+        file_ext = PurePosixPath(zip_file_element.filename).suffix.lower()
+        if file_ext in blocked_extensions:
+            raise SupersetException(
+                f"ZIP file contains a blocked file type: {file_ext}"
+            )
+
         uncompress_size += zip_file_element.file_size
         compress_size += zip_file_element.compress_size
-    compress_ratio = uncompress_size / compress_size
-    if compress_ratio > app.config["ZIP_FILE_MAX_COMPRESS_RATIO"]:
-        raise SupersetException("Zip compress ratio above allowed threshold")
+
+    if uncompress_size > max_total_size:
+        raise SupersetException(
+            f"Uncompressed ZIP content exceeds size limit of {max_total_size} bytes"
+        )
+
+    if compress_size > 0:
+        compress_ratio = uncompress_size / compress_size
+        if compress_ratio > app.config["ZIP_FILE_MAX_COMPRESS_RATIO"]:
+            raise SupersetException("Zip compress ratio above allowed threshold")
 
 
 def remove_extra_adhoc_filters(form_data: dict[str, Any]) -> None:

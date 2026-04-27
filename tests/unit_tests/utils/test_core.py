@@ -71,6 +71,7 @@ EXTRA_FILTER: QueryObjectFilterClause = {
 class MockZipInfo:
     file_size: int
     compress_size: int
+    filename: str = "file.yaml"
 
 
 @pytest.mark.parametrize(
@@ -470,6 +471,49 @@ def test_check_if_safe_zip_hidden_bomb(app_context: None) -> None:
         check_is_safe_zip(ZipFile)
 
 
+def test_check_if_safe_zip_too_many_entries(app_context: None) -> None:
+    """ZIP files with too many entries should be rejected."""
+    ZipFile = MagicMock()  # noqa: N806
+    ZipFile.infolist.return_value = [
+        MockZipInfo(file_size=10, compress_size=5, filename=f"f{i}.yaml")
+        for i in range(10_001)
+    ]
+    with pytest.raises(SupersetException, match="too many entries"):
+        check_is_safe_zip(ZipFile)
+
+
+def test_check_if_safe_zip_total_size_exceeded(app_context: None) -> None:
+    """ZIP files whose total uncompressed size exceeds the limit should be rejected."""
+    ZipFile = MagicMock()  # noqa: N806
+    # 6 entries × 100 MB each = 600 MB > 512 MB default limit
+    ZipFile.infolist.return_value = [
+        MockZipInfo(file_size=100 * 1024 * 1024, compress_size=50 * 1024 * 1024)
+        for _ in range(6)
+    ]
+    with pytest.raises(SupersetException, match="exceeds size limit"):
+        check_is_safe_zip(ZipFile)
+
+
+def test_check_if_safe_zip_blocked_extension(app_context: None) -> None:
+    """ZIP files containing executable file types should be rejected."""
+    ZipFile = MagicMock()  # noqa: N806
+    ZipFile.infolist.return_value = [
+        MockZipInfo(file_size=100, compress_size=50, filename="safe.yaml"),
+        MockZipInfo(file_size=100, compress_size=50, filename="malicious.exe"),
+    ]
+    with pytest.raises(SupersetException, match="blocked file type"):
+        check_is_safe_zip(ZipFile)
+
+
+def test_check_if_safe_zip_zero_compress_size(app_context: None) -> None:
+    """ZIP with zero compress_size should not cause a division-by-zero error."""
+    ZipFile = MagicMock()  # noqa: N806
+    ZipFile.infolist.return_value = [
+        MockZipInfo(file_size=0, compress_size=0),
+    ]
+    check_is_safe_zip(ZipFile)
+
+
 def test_generic_constraint_name_exists():
     # Create a mock SQLAlchemy database object
     database_mock = MagicMock()
@@ -646,8 +690,9 @@ def test_get_user_agent(mocker: MockerFixture, app_context: None) -> None:
 
 @with_config(
     {
-        "USER_AGENT_FUNC": lambda database,
-        source: f"{database.database_name} {source.name}"
+        "USER_AGENT_FUNC": lambda database, source: (
+            f"{database.database_name} {source.name}"
+        )
     }
 )
 def test_get_user_agent_custom(mocker: MockerFixture, app_context: None) -> None:
