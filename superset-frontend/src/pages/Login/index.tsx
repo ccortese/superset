@@ -88,7 +88,26 @@ export default function Login() {
   const nextUrl = useMemo(() => {
     try {
       const params = new URLSearchParams(window.location.search);
-      return params.get('next') || '';
+      const raw = params.get('next') || '';
+      if (!raw) return '';
+      // Only allow relative URLs that start with a single slash.
+      // Reject absolute URLs, protocol-relative (//), and backslash variants.
+      if (
+        raw.startsWith('//') ||
+        raw.startsWith('/\\') ||
+        !raw.startsWith('/')
+      ) {
+        return '';
+      }
+      try {
+        const parsed = new URL(raw, window.location.origin);
+        if (parsed.origin !== window.location.origin) {
+          return '';
+        }
+      } catch {
+        return '';
+      }
+      return raw;
     } catch (_error) {
       return '';
     }
