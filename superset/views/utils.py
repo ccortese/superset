@@ -63,6 +63,41 @@ if not feature_flag_manager.is_feature_enabled("ENABLE_JAVASCRIPT_CONTROLS"):
     REJECTED_FORM_DATA_KEYS = ["js_tooltip", "js_onclick_href", "js_data_mutator"]
 
 
+def is_safe_login_redirect(url: str) -> bool:
+    """Return True if *url* is safe to redirect to after login.
+
+    Only relative URLs (starting with ``/`` but not ``//``) are accepted.
+    Absolute URLs are rejected unless their host matches the current request
+    host, preventing open-redirect attacks via the ``next`` query parameter.
+    """
+    if not url or not url.strip():
+        return False
+
+    stripped = url.strip()
+
+    # Block protocol-relative and backslash-based URLs that browsers may
+    # interpret as absolute (e.g. //evil.com, /\\evil.com).
+    if stripped.startswith("//") or stripped.startswith("/\\"):
+        return False
+
+    parsed = parse.urlparse(stripped)
+
+    # Relative path with no scheme or host — safe.
+    if not parsed.scheme and not parsed.netloc:
+        return stripped.startswith("/")
+
+    # Only allow http(s) schemes.
+    if parsed.scheme not in ("http", "https"):
+        return False
+
+    # Absolute URL: must match the request host.
+    if has_request_context():
+        request_host = parse.urlparse(request.host_url).netloc.lower()
+        return parsed.netloc.lower() == request_host
+
+    return False
+
+
 def redirect_to_login(next_target: str | None = None) -> FlaskResponse:
     """Return a redirect response to the login view, preserving target URL.
 
@@ -82,7 +117,7 @@ def redirect_to_login(next_target: str | None = None) -> FlaskResponse:
         else:
             target = request.script_root + request.path
 
-    if target:
+    if target and is_safe_login_redirect(target):
         query["next"] = [target]
 
     encoded_query = parse.urlencode(query, doseq=True)

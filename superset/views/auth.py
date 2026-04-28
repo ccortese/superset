@@ -18,7 +18,7 @@
 import logging
 from typing import Optional
 
-from flask import g, redirect
+from flask import g, redirect, request
 from flask_appbuilder import expose
 from flask_appbuilder.const import LOGMSG_ERR_SEC_NO_REGISTER_HASH
 from flask_appbuilder.security.decorators import no_cache
@@ -26,6 +26,7 @@ from flask_appbuilder.security.views import AuthView, WerkzeugResponse
 from flask_babel import lazy_gettext
 
 from superset.views.base import BaseSupersetView
+from superset.views.utils import is_safe_login_redirect
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,9 @@ class SupersetAuthView(BaseSupersetView, AuthView):
     @no_cache
     def login(self, provider: Optional[str] = None) -> WerkzeugResponse:
         if g.user is not None and g.user.is_authenticated:
+            next_url = request.args.get("next", "")
+            if next_url and is_safe_login_redirect(next_url):
+                return redirect(next_url)
             return redirect(self.appbuilder.get_url_for_index)
 
         return super().render_app_template()
